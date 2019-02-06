@@ -35,7 +35,7 @@ def print(*args, level="DEBUG", sep=" ", end="", file=None) -> None:
     :param sep: str            separation between given arguments
     :param end: str            end of the line
     :param file: str           path to the file to write to
-    :return: function          logger from robot.api -> a form of logging.
+    :return: function          a form of logging.
     """
 
     if len(args) <= 0:  # if the length of the arguments are zero print a blank line
