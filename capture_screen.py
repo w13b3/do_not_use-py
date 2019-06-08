@@ -52,7 +52,7 @@ class Capture(threading.Thread):
         """ Override run of the threading.Thread class """
         with mss.mss() as screencapture:
             while True:
-                screen = screencapture.grab(monitor)  # capture the screen
+                screen = screencapture.grab(self.monitor)  # capture the screen
                 self.queue.put(np.array(screen))  # put the numpy.ndarray into the queue
 
 
