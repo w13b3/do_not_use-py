@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+import queue
+import cv2  # opencv-python
+import numpy as np
+
+
+class HSVWindow:
+    """ For HSV mask making
+
+    Little code snippet below showing how to use this class:
+
+    import queue
+    import cv2  # opencv-python
+    import numpy as np
+
+    from capture_screen import Capture  # https://github.com/w13b3/do_not_use
+
+    ...
+
+    if __name__ == '__main__':
+        from capture_screen import Capture  # https://github.com/w13b3/do_not_use
+        capture_queue = queue.Queue()
+        monitor = {'top': 100, 'left': 100, 'width': 640, 'height': 480}
+        app = Capture(monitor, capture_queue, daemon=True)
+        app.start()  # start the thread
+        HSVWindow(capture_queue).show()
+
+    """
+
+    def __init__(self, queue_):
+        """ Init of HSVWindow
+
+        :param queue_: (queue.Queue) a queue to get out the numpy.ndarray
+        """
+        self.queue = queue_
+
+    def __create_sliders(self):
+        """ Creates the sliders for the show method """
+        __nothing = lambda _x: None  # createTrackbar needs a callable.
+
+        cv2.namedWindow("Sliders")
+        cv2.createTrackbar("Lower - H", "Sliders", 0,   179, __nothing)
+        cv2.createTrackbar("Lower - S", "Sliders", 0,   255, __nothing)
+        cv2.createTrackbar("Lower - V", "Sliders", 0,   255, __nothing)
+        cv2.createTrackbar("Upper - H", "Sliders", 179, 179, __nothing)
+        cv2.createTrackbar("Upper - S", "Sliders", 255, 255, __nothing)
+        cv2.createTrackbar("Upper - V", "Sliders", 255, 255, __nothing)
+
+    def show(self):
+        """ Main funciton of this class
+
+        This wil open the captured screen and creates the sliders.
+        The sliders can be used to create a mask on the captured screen.
+        """
+
+        self.__create_sliders()  # create the Lower/Upper HSV sliders
+
+        while cv2.getWindowProperty('Sliders', 0) >= 0:  # while the sliders are visible
+            image = self.queue.get()  # get the ndarray from the queue
+            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)  # convert the image to HSV
+
+            # get the values from the sliders/trackbars
+            lower_h = cv2.getTrackbarPos("Lower - H", "Sliders")
+            lower_s = cv2.getTrackbarPos("Lower - S", "Sliders")
+            lower_v = cv2.getTrackbarPos("Lower - V", "Sliders")
+            upper_h = cv2.getTrackbarPos("Upper - H", "Sliders")
+            upper_s = cv2.getTrackbarPos("Upper - S", "Sliders")
+            upper_v = cv2.getTrackbarPos("Upper - V", "Sliders")
+
+            # create the mask that is shown when the sliders are moved
+            lower_blue = np.array([lower_h, lower_s, lower_v])
+            upper_blue = np.array([upper_h, upper_s, upper_v])
+            mask = cv2.inRange(hsv, lower_blue, upper_blue)
+            result = cv2.bitwise_and(image, image, mask=mask)
+
+            cv2.imshow("screen in HSV", result)  # show the result of the sliders
+            if cv2.waitKey(1) & 0xFF == ord('q'):  # when 'q' is typed; break the loop
+                cv2.destroyAllWindows()
+                break
+
+
+if __name__ == '__main__':
+    from capture_screen import Capture  # https://github.com/w13b3/do_not_use
+    capture_queue = queue.Queue()
+    monitor = {'top': 100, 'left': 100, 'width': 640, 'height': 480}
+    app = Capture(monitor, capture_queue, daemon=True)
+    app.start()  # start the thread
+    HSVWindow(capture_queue).show()
