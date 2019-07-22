@@ -1,0 +1,22 @@
+DEBUG:root:debug no arguments
+Level 45:root:level ?
+CRITICAL:root:critical
+ERROR:root:error
+WARNING:root:warning
+INFO:root:info
+DEBUG:root:debug
+DEBUG:root:
+	False
+	None
+	0.0001
+	100000
+	5j
+	['l', 'i', 's', 't']
+	('t', 'u', 'p', 'l', 'e')
+	(<class 'tuple'>,)
+	{'set'}
+	{'dict': 'ionary'}
+	<class 'type'>
+	〰
+ 😀
+DEBUG:root:10 None
