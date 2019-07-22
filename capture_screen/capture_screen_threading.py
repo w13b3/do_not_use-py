@@ -20,9 +20,10 @@ class Capture(threading.Thread):
     ...
 
     if __name__ == '__main__':
-        capture_queue = queue.Queue()
         monitor = {'top': 100, 'left': 100, 'width': 200, 'height': 200}  # size and position of the captured screen.
-        app = Capture(monitor, capture_queue, daemon=True)  # daemon thread
+
+        capture_queue = queue.Queue()
+        app = Capture(monitor, capture_queue, daemon=True)  # <- daemon thread
         app.start()  # start the thread
 
         while True:  # the screen is being captured
@@ -30,10 +31,9 @@ class Capture(threading.Thread):
             if cv2.waitKey(1) & 0xFF == ord('q'):  # when 'q' is typed stop the recording
                 cv2.destroyAllWindows()  # close all the windows made
                 break  # break the while loop
-
     """
 
-    def __init__(self, monitor, queue_, *args, **kwargs):
+    def __init__(self, monitor, queue, *args, **kwargs):
         """ Init of Capture
 
         :param monitor: (dict) containing te top, left coordinates and the height, width of the screen.
@@ -44,8 +44,8 @@ class Capture(threading.Thread):
         super().__init__(*args, **kwargs)
         assert isinstance(monitor, dict), "monitor needs to be a type(dict)"
         assert {"top", "left", "height", "width"} <= set(monitor), "missing keys in monitor dict"
-        self.queue = queue_
-        self.monitor = monitor
+        self.queue = queue
+        self.monitor = monitor  # e.g. {'top': 100, 'left': 100, 'width': 200, 'height': 200}
 
     def run(self):  # run thread
         # type: (queue) -> None
@@ -57,9 +57,10 @@ class Capture(threading.Thread):
 
 
 if __name__ == '__main__':
-    capture_queue = queue.Queue()
     monitor = {'top': 100, 'left': 100, 'width': 200, 'height': 200}  # size and position of the captured screen.
-    app = Capture(monitor, capture_queue, daemon=True)  # daemon thread
+
+    capture_queue = queue.Queue()
+    app = Capture(monitor, capture_queue, daemon=True)  # <- daemon thread
     app.start()  # start the thread
 
     while True:  # the screen is being captured

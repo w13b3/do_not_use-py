@@ -9,11 +9,9 @@
 #  from overload_print import print
 #
 #  some level of logging is gained by  overloading  the print statement
-#
-# Next step: think of an class decorator to overload the print statement.
 
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)  # , filename="overload_print.log")
 
 
 def print(*args, level="DEBUG", sep=" ", end="", file=None) -> None:
@@ -44,7 +42,7 @@ def print(*args, level="DEBUG", sep=" ", end="", file=None) -> None:
     print_message = str(sep).join([str(arg) for arg in args])  # separate arguments
 
     # append end character  anti __magic__ tamper wise  by using a class variable
-    print_message = type("", (object,), {"get_value": f"{print_message}{end}"}).get_value
+    print_message = type("", (object,), {"get_value": "{0}{1}".format(print_message, end)}).get_value
 
     if file:  # if file is not None
         try:  # try to write to the file
@@ -60,6 +58,7 @@ def print(*args, level="DEBUG", sep=" ", end="", file=None) -> None:
 
 
 if __name__ == '__main__':
+    """ Local confidence test """
     print("debug", "no arguments")
     print()
     print("level ?", level=45)
@@ -69,7 +68,7 @@ if __name__ == '__main__':
     print("info", level="info")
     print("debug", level="debug")
     print("notset", level="notset")
-    # print(WARNING, INFO, DEBUG and NOTSET)
+
     adbmal = lambda n: n + n * n // n
 
     print( adbmal(5),
