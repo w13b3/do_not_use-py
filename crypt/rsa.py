@@ -4,7 +4,7 @@
 
 import os
 
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.asymmetric import rsa, padding, utils
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.backends import default_backend
 
@@ -20,6 +20,20 @@ def generate_keys(directory: str, pwd: bytes = None) -> None:
                 and the private key is encrypted with a the password
     :return: None
     """
+    private_key = generate_private_key(directory, pwd)
+    generate_public_key(directory, private_key)
+
+
+def generate_private_key(directory: str, pwd: bytes = None) -> rsa:
+    """
+    Generate the private key
+    Generated keys have a default name, you should rename them
+    this can be done with os.rename()
+    :param directory: folder where the keys are made
+                      overwrite the existing keys
+    :param pwd: password: if not None, Best available encryption is chosen
+    :return: rsa  private key object
+    """
     directory = os.path.realpath(directory)
     if not os.path.isdir(directory):
         directory = os.path.dirname(directory)
@@ -34,7 +48,6 @@ def generate_keys(directory: str, pwd: bytes = None) -> None:
     if bool(pwd):  # if password and length is greater of equal to 1.
         encrypt_algo = serialization.BestAvailableEncryption(pwd)
 
-    # Store the private key
     private_path = os.path.join(directory, './private_key.pem')
     with open(private_path, 'wb') as open_file:
         pem = private_key.private_bytes(
@@ -42,8 +55,18 @@ def generate_keys(directory: str, pwd: bytes = None) -> None:
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=encrypt_algo)
         open_file.write(pem)
+    return private_key
 
-    # store the public key
+
+def generate_public_key(directory: str, private_key: rsa) -> rsa:
+    """
+    Generate the public key
+    Generated keys have a default name, you should rename them
+    this can be done with os.rename()
+    :param directory: folder where the keys are made
+                      overwrite the existing keys
+    :return: rsa  private key object
+    """
     public_key = private_key.public_key()
     public_path = os.path.join(directory, './public_key.pem')
     with open(public_path, 'wb') as open_file:
@@ -51,6 +74,7 @@ def generate_keys(directory: str, pwd: bytes = None) -> None:
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo)
         open_file.write(pem)
+    return public_key
 
 
 def read_private_key(key_file: str, pwd: bytes = None) -> rsa:
@@ -129,9 +153,11 @@ if __name__ == '__main__':
     private_path = os.path.join(directory.name, 'private_key.pem')
     public_path = os.path.join(directory.name, 'public_key.pem')
 
-    generate_keys(directory.name, pwd)  # generate the keys
-    private_key = read_private_key(private_path, pwd)
-    public_key = read_public_key(public_path)  # read the keys
+    private_key = generate_private_key(directory.name, pwd)
+    public_key = generate_public_key(directory.name, private_key)
+    # generate_keys(directory.name, pwd)  # generate the keys
+    # private_key = read_private_key(private_path, pwd)
+    # public_key = read_public_key(public_path)  # read the keys
     print(f"private_key: {private_key}")
     print(f"public_key: {public_key}")  # both are objects
 
