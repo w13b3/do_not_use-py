@@ -6,25 +6,71 @@ import os
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.backends import default_backend
-from cryptography.exceptions import InvalidSignature
+from cryptography.exceptions import InvalidSignature, InvalidKey
 
 
-def _get_private_key() -> rsa:
+def __assure_private_key(private_key: rsa) -> None:
+    """
+    Check if a private key is a private key
+    :param private_key: rsa  the private key to check
+    :raises InvalidKey: if given key is invalid
+    :return: None
+    """
+    private_keys = (
+        rsa.RSAPrivateKey, rsa.RSAPrivateNumbers, rsa.RSAPrivateKeyWithSerialization)
+    if not isinstance(private_key, private_keys):
+        raise InvalidKey("Given key is not a private key")
+
+
+def __assure_public_key(public_key: rsa) -> None:
+    """
+    Check if a public key is a public key
+    :param public_key: rsa  the public key to check
+    :raises InvalidKey: if given key is invalid
+    :return: None
+    """
+    public_keys = (
+        rsa.RSAPublicKey, rsa.RSAPublicNumbers, rsa.RSAPublicKeyWithSerialization)
+    if not isinstance(public_key, public_keys):
+        raise InvalidKey("Given key is not a public key")
+
+
+def _get_private_key(public_exponent: int = 65537, key_size: int = 2048) -> rsa:
+    """
+    Private helper function to generate a private key
+    :param public_exponent:  int
+    :param key_size:  int
+    :return:  rsa  private key
+    """
     private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
+            public_exponent=public_exponent,
+            key_size=key_size,
             backend=default_backend())
     return private_key
 
 
-def _get_public_pem(public_key: rsa) -> rsa:
+def _get_public_pem(public_key: rsa) -> bytes:
+    """
+    Private function to make generate a pem which can be saved to store the public key
+    :param public_key:  the public key made from a private key
+    :return:  bytes
+    """
+    __assure_public_key(public_key)
     pem = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo)
     return pem
 
 
-def _get_private_pem(private_key: rsa, pwd: bytes = None) -> rsa:
+def _get_private_pem(private_key: rsa, pwd: bytes = None) -> bytes:
+    """
+    Private function to make generate a pem which can be saved to store the private key
+    :param private_key:  the private_key
+    :param pwd: password: if not None, Best available encryption is chosen
+                and the private key is encrypted with a the password
+    :return:  bytes
+    """
+    __assure_private_key(private_key)
     encrypt_algo = serialization.NoEncryption()
     if bool(pwd):  # if password and length is greater of equal to 1.
         encrypt_algo = serialization.BestAvailableEncryption(pwd)
@@ -40,7 +86,7 @@ def generate_keys(directory: str, pwd: bytes = None) -> None:
     """
     Generate the public and private keys
     Generated keys have a default name, you should rename them
-    this can be done with os.rename()
+    This can be done with os.rename()
     :param directory: folder where the keys are made
                       overwrite the existing keys
     :param pwd: password: if not None, Best available encryption is chosen
@@ -51,11 +97,11 @@ def generate_keys(directory: str, pwd: bytes = None) -> None:
     generate_public_key(directory, private_key)
 
 
-def generate_private_key(directory: str, pwd: bytes = None) -> rsa:
+def generate_private_key(directory: str, pwd: bytes = None) -> rsa.RSAPrivateKey:
     """
-    Generate the private key
+    Generate the private key, this key should not be shared with anyone!
     Generated keys have a default name, you should rename them
-    this can be done with os.rename()
+    This can be done with os.rename()
     :param directory: folder where the keys are made
                       overwrite the existing keys
     :param pwd: password: if not None, Best available encryption is chosen
@@ -75,15 +121,17 @@ def generate_private_key(directory: str, pwd: bytes = None) -> rsa:
     return private_key
 
 
-def generate_public_key(directory: str, private_key: rsa) -> rsa:
+def generate_public_key(directory: str, private_key: rsa) -> rsa.RSAPublicKey:
     """
-    Generate the public key
+    Generate the public key, share this key with anyone
     Generated keys have a default name, you should rename them
-    this can be done with os.rename()
+    This can be done with os.rename()
     :param directory: folder where the keys are made
                       overwrite the existing keys
+    :raises InvalidKey: if given key is invalid
     :return: rsa  private key object
     """
+    __assure_private_key(private_key)
     public_key = private_key.public_key()
     public_path = os.path.join(directory, './public_key.pem')
     with open(public_path, 'wb') as open_file:
@@ -92,10 +140,10 @@ def generate_public_key(directory: str, private_key: rsa) -> rsa:
     return public_key
 
 
-def read_private_key(key_file: str, pwd: bytes = None) -> rsa:
+def read_private_key(key_file: str, pwd: bytes = None) -> rsa.RSAPrivateKey:
     """
     Read and return a private key
-    to use with an incoming encrypted message
+    To use with an incoming encrypted message
     :param key_file: str  path to the keyfile
     :param pwd: bytes  if the private key is locked with an password
     :raises FileNotFoundError:  if key_file doesnt exist
@@ -110,10 +158,10 @@ def read_private_key(key_file: str, pwd: bytes = None) -> rsa:
     return private_key
 
 
-def read_public_key(key_file: str) -> rsa:
+def read_public_key(key_file: str) -> rsa.RSAPublicKey:
     """
     Read and return a public key
-    to use with encrypting an outgoing message
+    To use with encrypting an outgoing message
     :param key_file: str
     :raises FileNotFoundError:  if key_file doesnt exist
     :return: serialization object
@@ -128,6 +176,15 @@ def read_public_key(key_file: str) -> rsa:
 
 
 def sign_message(message: bytes, private_key: rsa) -> bytes:
+    """
+    Sign a message with a private key
+    This is done to make sure the message to send comes from the right source
+    :param message: bytes
+    :param private_key: rsa
+    :raises InvalidKey: if given key is invalid
+    :return: bytes
+    """
+    __assure_private_key(private_key)
     signature = private_key.sign(
         message, padding.PSS(
             mgf=padding.MGF1(hashes.SHA256()),
@@ -137,6 +194,16 @@ def sign_message(message: bytes, private_key: rsa) -> bytes:
 
 
 def verify_signed_message(signature: bytes, message: bytes, public_key: rsa) -> bool:
+    """
+    Verify the incoming message with a public key
+    This to ensure the incoming message is indeed from the expected source
+    :param signature: received signature
+    :param message: incoming message
+    :param public_key: a public key from the source of the message
+    :raises InvalidKey: if given key is invalid
+    :return: bool
+    """
+    __assure_public_key(public_key)
     try:
         public_key.verify(signature, message,
             padding.PSS(
@@ -154,8 +221,10 @@ def rsa_encrypt(message: bytes, public_key: rsa) -> bytes:
     Encrypt a message with a public key
     :param message:  byte string to encrypt
     :param public_key:  key to encrypt the message with
+    :raises InvalidKey: if given key is invalid
     :return: bytes  as the encrypted message
     """
+    __assure_public_key(public_key)
     encrypted_message = public_key.encrypt(
         message, padding.OAEP(
             mgf=padding.MGF1(algorithm=hashes.SHA256()),
@@ -169,8 +238,10 @@ def rsa_decrypt(encrypted: bytes, private_key: rsa) -> bytes:
     Decrypt an encrypted message with a private key
     :param encrypted:  byte string encrypted message
     :param private_key:  key to decrypt the message with
+    :raises InvalidKey: if given key is invalid
     :return: bytes  as the decrypted message
     """
+    __assure_private_key(private_key)
     decrypted_message = private_key.decrypt(
         encrypted, padding.OAEP(
             mgf=padding.MGF1(algorithm=hashes.SHA256()),
