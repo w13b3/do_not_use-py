@@ -3,10 +3,37 @@
 # rsa.py
 
 import os
-
-from cryptography.hazmat.primitives.asymmetric import rsa, padding, utils
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.backends import default_backend
+from cryptography.exceptions import InvalidSignature
+
+
+def _get_private_key() -> rsa:
+    private_key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+            backend=default_backend())
+    return private_key
+
+
+def _get_public_pem(public_key: rsa) -> rsa:
+    pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    return pem
+
+
+def _get_private_pem(private_key: rsa, pwd: bytes = None) -> rsa:
+    encrypt_algo = serialization.NoEncryption()
+    if bool(pwd):  # if password and length is greater of equal to 1.
+        encrypt_algo = serialization.BestAvailableEncryption(pwd)
+
+    pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=encrypt_algo)
+    return pem
 
 
 def generate_keys(directory: str, pwd: bytes = None) -> None:
@@ -39,22 +66,12 @@ def generate_private_key(directory: str, pwd: bytes = None) -> rsa:
         directory = os.path.dirname(directory)
 
     # generate private key
-    private_key = rsa.generate_private_key(
-        public_exponent=65537,
-        key_size=2048,
-        backend=default_backend())
-
-    encrypt_algo = serialization.NoEncryption()
-    if bool(pwd):  # if password and length is greater of equal to 1.
-        encrypt_algo = serialization.BestAvailableEncryption(pwd)
+    private_key = _get_private_key()
 
     private_path = os.path.join(directory, './private_key.pem')
     with open(private_path, 'wb') as open_file:
-        pem = private_key.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=encrypt_algo)
-        open_file.write(pem)
+        private_pem = _get_private_pem(private_key, pwd)
+        open_file.write(private_pem)
     return private_key
 
 
@@ -70,10 +87,8 @@ def generate_public_key(directory: str, private_key: rsa) -> rsa:
     public_key = private_key.public_key()
     public_path = os.path.join(directory, './public_key.pem')
     with open(public_path, 'wb') as open_file:
-        pem = public_key.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo)
-        open_file.write(pem)
+        public_pem = _get_public_pem(public_key)
+        open_file.write(public_pem)
     return public_key
 
 
@@ -110,6 +125,28 @@ def read_public_key(key_file: str) -> rsa:
         public_key = serialization.load_pem_public_key(
             key_file.read(), backend=default_backend())
     return public_key
+
+
+def sign_message(message: bytes, private_key: rsa) -> bytes:
+    signature = private_key.sign(
+        message, padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256())
+    return signature
+
+
+def verify_signed_message(signature: bytes, message: bytes, public_key: rsa) -> bool:
+    try:
+        public_key.verify(signature, message,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH),
+            hashes.SHA256())
+    except InvalidSignature:
+        return False
+    else:
+        return True
 
 
 def rsa_encrypt(message: bytes, public_key: rsa) -> bytes:
@@ -153,18 +190,48 @@ if __name__ == '__main__':
     private_path = os.path.join(directory.name, 'private_key.pem')
     public_path = os.path.join(directory.name, 'public_key.pem')
 
-    private_key = generate_private_key(directory.name, pwd)
-    public_key = generate_public_key(directory.name, private_key)
     # generate_keys(directory.name, pwd)  # generate the keys
+    private_key1 = generate_private_key(directory.name, pwd)
+    private_key2 = _get_private_key()  # use hidden method for testing
+    public_key1 = generate_public_key(directory.name, private_key1)
+    public_key2 = private_key1.public_key()
+    public_key3 = private_key2.public_key()
+
+    # read saved keys
     # private_key = read_private_key(private_path, pwd)
     # public_key = read_public_key(public_path)  # read the keys
-    print(f"private_key: {private_key}")
-    print(f"public_key: {public_key}")  # both are objects
 
-    encrypted_message = rsa_encrypt(original_message, public_key)
+    # keys are objects
+    # print(f"private_key1: {private_key1}")
+    # print(f"private_key2: {private_key2}")
+    # print(f"public_key1: {public_key1}")
+    # print(f"public_key2: {public_key2}")
+    # print(f"public_key2: {public_key3}")
+
+    # verify all keys are different
+    print(f"public_key1 == public_key2 -> {public_key1 == public_key2}")
+    print(f"public_key1 == public_key3 -> {public_key1 == public_key3}")
+    print(f"public_key2 == public_key3 -> {public_key2 == public_key3}")
+
+    # encrypt and decrypt message
+    encrypted_message = rsa_encrypt(original_message, public_key1)
     print(f"encrypted_message: {encrypted_message}")  # long byte string
-    decrypted_message = rsa_decrypt(encrypted_message, private_key)
+    decrypted_message = rsa_decrypt(encrypted_message, private_key1)
     print(f"decrypted_message: {decrypted_message}")  # b'hello'
     print(f"original_message == decrypted_message -> {original_message == decrypted_message}")
+
+    # check if signed message can only be verified by public keys derived from the private key
+    # which the signed message was signed with
+    signature = sign_message(encrypted_message, private_key1)
+    # public_key1 & public_key2 is made by private_key1
+    public1_verify = verify_signed_message(signature, encrypted_message, public_key1)
+    public2_verify = verify_signed_message(signature, encrypted_message, public_key2)
+    # public_key3 is made by private_key2
+    public3_verify = verify_signed_message(signature, encrypted_message, public_key3)
+
+    print(f"signature signed with private_key1: {signature}")
+    print(f"public_key1 verify: {public1_verify}")
+    print(f"public_key2 verify: {public2_verify}")
+    print(f"public_key3 verify: {public3_verify}")
 
     directory.cleanup()  # delete tempdir
