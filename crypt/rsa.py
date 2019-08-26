@@ -3,7 +3,7 @@
 # rsa.py
 
 import os
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives.asymmetric import rsa, padding, utils
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidSignature, InvalidKey
@@ -35,7 +35,7 @@ def __assure_public_key(public_key: rsa) -> None:
         raise InvalidKey("Given key is not a public key")
 
 
-def _get_private_key(public_exponent: int = 65537, key_size: int = 2048) -> rsa:
+def get_private_key(public_exponent: int = 65537, key_size: int = 4096) -> rsa:
     """
     Private helper function to generate a private key
     :param public_exponent:  int
@@ -49,7 +49,7 @@ def _get_private_key(public_exponent: int = 65537, key_size: int = 2048) -> rsa:
     return private_key
 
 
-def _get_public_pem(public_key: rsa) -> bytes:
+def get_public_pem(public_key: rsa) -> bytes:
     """
     Private function to make generate a pem which can be saved to store the public key
     :param public_key:  the public key made from a private key
@@ -62,7 +62,7 @@ def _get_public_pem(public_key: rsa) -> bytes:
     return pem
 
 
-def _get_private_pem(private_key: rsa, pwd: bytes = None) -> bytes:
+def get_private_pem(private_key: rsa, pwd: bytes = None) -> bytes:
     """
     Private function to make generate a pem which can be saved to store the private key
     :param private_key:  the private_key
@@ -82,7 +82,7 @@ def _get_private_pem(private_key: rsa, pwd: bytes = None) -> bytes:
     return pem
 
 
-def generate_keys(directory: str, pwd: bytes = None) -> None:
+def generate_keys(directory: str, pwd: bytes = None) -> (rsa.RSAPrivateKey, rsa.RSAPublicKey):
     """
     Generate the public and private keys
     Generated keys have a default name, you should rename them
@@ -91,10 +91,11 @@ def generate_keys(directory: str, pwd: bytes = None) -> None:
                       overwrite the existing keys
     :param pwd: password: if not None, Best available encryption is chosen
                 and the private key is encrypted with a the password
-    :return: None
+    :return: private, public keys
     """
     private_key = generate_private_key(directory, pwd)
-    generate_public_key(directory, private_key)
+    public_key = generate_public_key(directory, private_key)
+    return private_key, public_key
 
 
 def generate_private_key(directory: str, pwd: bytes = None) -> rsa.RSAPrivateKey:
@@ -112,11 +113,11 @@ def generate_private_key(directory: str, pwd: bytes = None) -> rsa.RSAPrivateKey
         directory = os.path.dirname(directory)
 
     # generate private key
-    private_key = _get_private_key()
+    private_key = get_private_key()
 
     private_path = os.path.join(directory, './private_key.pem')
     with open(private_path, 'wb') as open_file:
-        private_pem = _get_private_pem(private_key, pwd)
+        private_pem = get_private_pem(private_key, pwd)
         open_file.write(private_pem)
     return private_key
 
@@ -135,7 +136,7 @@ def generate_public_key(directory: str, private_key: rsa) -> rsa.RSAPublicKey:
     public_key = private_key.public_key()
     public_path = os.path.join(directory, './public_key.pem')
     with open(public_path, 'wb') as open_file:
-        public_pem = _get_public_pem(public_key)
+        public_pem = get_public_pem(public_key)
         open_file.write(public_pem)
     return public_key
 
@@ -250,6 +251,14 @@ def rsa_decrypt(encrypted: bytes, private_key: rsa) -> bytes:
     return decrypted_message
 
 
+def digest(message: bytes, chunk_size: int = 256) -> bytes:
+    chosen_hash = hashes.SHA256()
+    hasher = hashes.Hash(chosen_hash, default_backend())
+    (hasher.update(message[i:i + chunk_size]) for i in range(0, len(message), chunk_size))
+    digest = hasher.finalize()
+    return digest
+
+
 if __name__ == '__main__':
     from time import time
     from tempfile import TemporaryDirectory
@@ -263,7 +272,7 @@ if __name__ == '__main__':
 
     # generate_keys(directory.name, pwd)  # generate the keys
     private_key1 = generate_private_key(directory.name, pwd)
-    private_key2 = _get_private_key()  # use hidden method for testing
+    private_key2 = get_private_key()  # use hidden method for testing
     public_key1 = generate_public_key(directory.name, private_key1)
     public_key2 = private_key1.public_key()
     public_key3 = private_key2.public_key()
