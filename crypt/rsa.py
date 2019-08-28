@@ -251,14 +251,6 @@ def rsa_decrypt(encrypted: bytes, private_key: rsa) -> bytes:
     return decrypted_message
 
 
-def digest(message: bytes, chunk_size: int = 256) -> bytes:
-    chosen_hash = hashes.SHA256()
-    hasher = hashes.Hash(chosen_hash, default_backend())
-    (hasher.update(message[i:i + chunk_size]) for i in range(0, len(message), chunk_size))
-    digest = hasher.finalize()
-    return digest
-
-
 if __name__ == '__main__':
     from time import time
     from tempfile import TemporaryDirectory
