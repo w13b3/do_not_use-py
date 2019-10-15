@@ -3,6 +3,8 @@
 # imagecompare.py
 
 import numpy as np
+from concurrent import futures
+from functools import partial
 
 
 def gaussian2d(shape: tuple = (5,), sigma: tuple = (1.5,)) -> np.ndarray:
@@ -36,13 +38,18 @@ def convolve_array(arr: np.ndarray, conv_filter: np.ndarray) -> np.ndarray:
     if len(arr.shape) <= 2:  # no `depth` and probably 2d array
         return convolve2d(arr, conv_filter)
 
-    arr_stack = []
-    for dimension in range(arr.ndim):
-        arr_slice = arr[:, :, dimension]
-        convolve_dimension = convolve2d(arr_slice, conv_filter)
-        arr_stack.append(convolve_dimension)
+    # function is faster with concurent.futures and functools.partial
+    partial_convolve2d = partial(convolve2d, conv_filter=conv_filter)
+    # with futures.ProcessPoolExecutor() as ex:  # slow (?)
+    with futures.ThreadPoolExecutor() as ex:  # fast
+        arr_stack = ex.map(partial_convolve2d, [arr[:, :, dim] for dim in range(arr.ndim)])
 
-    return np.stack(arr_stack, axis=2)  # -> np.ndarray
+    # arr_stack = [  # slow comprehension list
+    #     convolve2d(arr[:, :, dim], conv_filter)
+    #     for dim in range(arr.ndim)
+    # ]
+
+    return np.stack(list(arr_stack), axis=2)  # -> np.ndarray
 
 
 def convolve2d(arr: np.ndarray, conv_filter: np.ndarray) -> np.ndarray:
@@ -62,39 +69,6 @@ def convolve2d(arr: np.ndarray, conv_filter: np.ndarray) -> np.ndarray:
 
 def structural_similarity(array1: np.ndarray, array2: np.ndarray, filter_size: int = 11, filter_sigma: float = 1.5,
                           k1: float = 0.01, k2: float = 0.03, max_val: int = 255) -> (np.float64, np.ndarray):
-    """
-    calculates the Structural SIMilarity Index (SSIM)
-    returns a score of the image difference -1 to 1 where 1 is identical
-            and a diff index array
-
-    grayscale and color images can be used
-    color images take more time to calculate
-
-    acknowledgement:
-    https://en.wikipedia.org/wiki/Structural_similarity
-    https://scikit-image.org/docs/dev/auto_examples/transform/plot_ssim.html
-    Zhou Wang: https://github.com/obartra/ssim/blob/master/assets/ssim.pdf
-    https://blog.csdn.net/weixin_42096901/article/details/90172534
-    https://github.com/tensorflow/models/blob/master/research/compression/image_encoder/msssim.py
-
-    :param array1: pixel value array to compare against `array2`
-    :type array1: np.ndarray
-    :param array2: pixel value array to compare against `array1`
-    :type array2: np.ndarray
-    :param filter_size: kernel size for the gaussian blur
-    :type filter_size: int
-    :param filter_sigma: standard deviation for the gaussian blur
-    :type filter_sigma: float
-    :param k1: constant for stability
-    :type k1: float
-    :param k2: constant for stability
-    :type k2: float
-    :param max_val: dynamic range of the given pixel value array  255 for 8-bit images
-    :type max_val:int
-    :return: score, diff array
-    :rtype: (np.float64, np.ndarray)
-    :raises: ValueError if given arrays are not the same shape
-    """
     if array1.shape != array2.shape:
         raise ValueError('Input arrays must have the same shape')
 
@@ -152,27 +126,6 @@ def structural_similarity(array1: np.ndarray, array2: np.ndarray, filter_size: i
     return mssim, ssim  # -> (np.float64, np.ndarray)
 
 
-def mean_absolute_error(array1, array2):
-    return np.abs(np.subtract(array1, array2)).mean()
-
-
-mae = mean_absolute_error
-
-
-def mean_squared_error(array1, array2):
-    return np.square(np.subtract(array1, array2)).mean()
-
-
-mse = mean_squared_error
-
-
-def root_mean_squared_error(array1, array2):
-    return np.sqrt(mean_squared_error(array1, array2))
-
-
-rmse = root_mean_squared_error
-
-
 if __name__ == '__main__':
     print("start\n")
 
@@ -181,32 +134,31 @@ if __name__ == '__main__':
     # logging.getLogger("logging").setLevel(logging.DEBUG)
     logging.captureWarnings(True)
 
-    blue = np.zeros((100, 100, 3))
-    blue[:, :, 0] = 255
+    import cv2
+    import timeit
 
-    green = np.zeros((100, 100, 3))
-    green[:, :, 1] = 255
+    image1 = "index1.jpeg"
+    image2 = "index2.jpeg"
+    image1 = cv2.imread(image1)  # to array
+    image2 = cv2.imread(image2)
 
-    red = np.zeros((100, 100, 3))
-    red[:, :, 2] = 255
+    # from skimage.metrics import structural_similarity as ssim
+    # print(ssim(image1, image1, multichannel=True))  # 1.0
+    # print(ssim(image1, image2, multichannel=True))  # 0.2996981914517261
 
-    fill128 = np.zeros((100, 100))
-    fill128[:, :, ] = 128
+    # from __main__ import structural_similarity
+    # print(structural_similarity(image1, image1)[0])  # 1.0
+    # print(structural_similarity(image1, image2)[0])  # 0.30561782186046865
 
-    fill255 = np.zeros((100, 100))
-    fill255[:, :, ] = 255
+    loops = 10
+    result = timeit.timeit(
+        stmt="structural_similarity(image1, image2); print('running')",
+        setup="from __main__ import structural_similarity",
+        globals=globals(),
+        number=loops
+    )
+    print(f"total time: {result}sec, per loop: {result / loops}")
 
-    score, diff = structural_similarity(blue, blue)
-    print(f"blue <-> blue score: {score}")
 
-    score, diff = structural_similarity(red, blue)
-    print(f"red <-> blue score: {score}")
 
-    score, diff = structural_similarity(red, green)
-    print(f"red <-> green score: {score}")
 
-    score, diff = structural_similarity(fill128, fill128)
-    print(f"fill128 <-> fill128 score: {score}")
-
-    score, diff = structural_similarity(fill128, fill255)
-    print(f"fill128 <-> fill255 score: {score}")
