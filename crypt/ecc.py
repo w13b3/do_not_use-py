@@ -309,7 +309,6 @@ def sign_data(data: bytes, private_key: ec.EllipticCurvePrivateKey, algorithm: e
     __assure_private_key(private_key)
     if not bool(algorithm):
         algorithm = ec.ECDSA(hashes.SHA256())
-    print(algorithm)
     signed_data = private_key.sign(data, algorithm)
     return signed_data
 
