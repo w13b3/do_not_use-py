@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 # rsa_test.py
 
+import os
 import random
 import string
 import unittest
+from tempfile import TemporaryDirectory
 from crypt.rsa import *
 
 
@@ -133,4 +135,11 @@ class RsaTest(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    print("start\n")
+
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger("__main__").setLevel(logging.INFO)
+    logging.captureWarnings(True)
+
     unittest.main()
