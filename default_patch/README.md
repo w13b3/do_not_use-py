@@ -6,7 +6,7 @@ With this you can patch a callable (like a function) and give it default values.
 
 For a personal project i needed to add an authorization token to parameters and headers to the REST-API calls.
 
-It was not very DRY to add the authorization token to each parameter.
+It was not very [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself) to add the authorization token to each parameter.
 
 [There must be a better way](https://twitter.com/raymondh), ~~this _may_ be it~~.
 
@@ -15,7 +15,7 @@ It was not very DRY to add the authorization token to each parameter.
 
 ``` 
     >>> func1 = lambda x: print(x)
-    >>> func1 = default_patch(function, x='hello')
+    >>> func1 = default_patch(func1, x='hello')
     >>> func1()
     'hello'
 ```
