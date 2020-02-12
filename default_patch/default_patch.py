@@ -5,13 +5,19 @@
 import inspect
 import functools
 import itertools
-import contextlib
 
 # known bug(s):
 # >>> func = lambda x: print(x)
 # >>> func = default_patch(func, x=False)
 # >>> func(True, x=True)  # 'SyntaxError: keyword argument repeated' expected here
 # True
+# # #
+# >>> class C:
+# >>>     def func(self, x, y=None): return x, y
+# >>>     func = default_patch(func, y=True)
+# >>>     func('x')  # error here
+# >>> C()
+# TypeError: func() missing 1 required positional argument: 'x'
 
 
 def default_patch(func: callable, **default_kwargs) -> callable:
@@ -24,17 +30,17 @@ def default_patch(func: callable, **default_kwargs) -> callable:
 
     example usage:
     >>> func1 = lambda x: print(x)
-    >>> func1 = default_patch(function, x='hello')
+    >>> func1 = default_patch(func1, x='hello')
     >>> func1()
-    'hello'
+    hello
     >>> def function2(a, b={1: 'One'}):
     ...     return a, b
     ...
     >>> func2 = default_patch(function2, a=False, b={2: 'Two'})
     >>> func2(True)
-    True, {2: 'Two'}
+    (True, {2: 'Two'})
     >>> func2(True, b={3: 'Three'})
-    None, {2: 'Two', 3: 'Three'}
+    (True, {2: 'Two', 3: 'Three'})
     """
 
     if not callable(func):
@@ -68,21 +74,16 @@ def default_patch(func: callable, **default_kwargs) -> callable:
 
     @functools.wraps(func)
     def inner_func(*func_args, **func_kwargs):
-        # the following checks if self is given in the arguments
-        #  if so: it removes it anc gives it uses it with the call of the function.
         self = False
+        potential_self, *_ = func_args or (None, )  # unpack potential self reference or None if no *func_args is given
         parameter_names = tuple(func_info.args + func_info.kwonlyargs)  # if given this includes self
-        if bool(func_args):
-            with contextlib.suppress(AttributeError):  # <arg> has no attribute <func.__name__>
-                inspect.ismethod(getattr(func_args[0], func.__name__))  # check if 1st pos-arg is self
-                # func_args (now a tuple) will become a list: https://twitter.com/raymondh/status/1205656939532734464
-                self, *func_args = func_args  # -> list
-                _, *parameter_names = parameter_names  # remove 'self' from parameter names
-        # print(f'is self included in the parameters: {bool(self)}')
+
+        if hasattr(potential_self, func.__name__):
+            _, *parameter_names = parameter_names  # remove object reference (self) from parameter names
+            self, *func_args = func_args  # unpack self from the arguments; bool(self) is a True value
 
         # add the given 'positional arguments' (func_args) to the 'keyword arguments' (func_kwargs)
         func_kwargs = {**func_kwargs, **{kw: arg for arg, kw in zip(func_args, parameter_names)}}
-
         func_kwargs_copy = func_kwargs.copy()  # make a copy of the variable that is going to change
         for f_key, f_val in func_kwargs_copy.items():
             if f_key not in default_kwargs:  # when there is no f_key in the default_keys, continue iteration
@@ -92,7 +93,6 @@ def default_patch(func: callable, **default_kwargs) -> callable:
                 continue
             new_val = extend_value(f_val, d_val)  # dispatch based on type of f_val
             func_kwargs[f_key] = new_val  # update the func_kwargs with the extended value
-
         new_kwargs = {**default_kwargs, **func_kwargs}  # combine the kwargs with priority for func_kwargs
 
         # if self is a positional argument if default patch is used in a class
@@ -103,3 +103,10 @@ def default_patch(func: callable, **default_kwargs) -> callable:
     # inner_func.args = default_args  # no args allowed
     inner_func.keywords = default_kwargs
     return inner_func
+
+
+if __name__ == '__main__':
+    def func(x, y=False): return x, y
+    func = default_patch(func, y=True)
+    func = default_patch(func, x=True)
+    print(func())

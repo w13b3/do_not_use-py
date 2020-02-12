@@ -208,6 +208,26 @@ class DefaultPatchTest(unittest.TestCase):
         result = patched_function(False, x=True)  # 'feature' ¯\_(ツ)_/¯
         self.assertEqual(result, expected_result)
 
+    def test_recursion(self):
+        def local_func(x, y, z=None):
+            # print(x, y, z)
+            return x, y, z
+
+        local_func = default_patch(local_func, x=True)  # set default
+        local_func = default_patch(local_func, y=True)  # set default
+        local_func = default_patch(local_func, z=True)  # set default
+        recursive_function = local_func  # rename function
+
+        expected_result = (True, True, True)
+        result = recursive_function()  # no parameters, x y and z are set
+        self.assertEqual(result, expected_result)
+
+        expected_result = (True, True)
+        def_func_with_default_arg = default_patch(self.def_func_with_default_arg, x=True)
+        def_func_with_default_arg = default_patch(def_func_with_default_arg, y=True)  # overwrite func above
+        result = def_func_with_default_arg()
+        self.assertEqual(result, expected_result)
+
 
 if __name__ == '__main__':
     print("start\n")
