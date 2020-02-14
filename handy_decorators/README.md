@@ -6,7 +6,7 @@ A decorator is a function that takes another function and extends the behavior o
 Example:
 ```
 >>> from deco import clapping_hands
->>> @clappinghands  # <- decorator
+>>> @clapping_hands  # <- decorator
 >>> def text_function(text: str) -> str:
 ...    return str(text)
 ...
