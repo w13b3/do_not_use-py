@@ -4,7 +4,7 @@
 
 import unittest
 
-from default_patch.default_patch import default_patch
+# from default_patch.default_patch import default_patch
 
 
 class DefaultPatchTest(unittest.TestCase):
@@ -30,7 +30,7 @@ class DefaultPatchTest(unittest.TestCase):
         self.assertFalse(res_x)
         self.assertFalse(res_y)  # both x and y returns false, thus x=True was not used; *arg has priority over **kwarg
 
-    def test_given_function_should_be_callable(self):
+    def test_given_function_should_be_callable_old(self):
         with self.assertRaises(ValueError):
             func = default_patch('local_func', x=True)  # str 'func' is not a callable
 
@@ -226,6 +226,25 @@ class DefaultPatchTest(unittest.TestCase):
         def_func_with_default_arg = default_patch(self.def_func_with_default_arg, x=True)
         def_func_with_default_arg = default_patch(def_func_with_default_arg, y=True)  # overwrite func above
         result = def_func_with_default_arg()
+        self.assertEqual(result, expected_result)
+
+    def test_the_decorator_functionality(self):
+        @default_patch  # no arguments
+        def patched_no_kwarg(x, y, z=None): return x, y, z
+
+        expected_result = (True, False, None)
+        result = patched_no_kwarg(True, y=False)
+        self.assertEqual(result, expected_result)
+
+        @default_patch(y=True, z=True)  # with arguments
+        def patched_func_with_kwargs(x, y, z=None): return x, y, z
+
+        expected_result = (True, True, True)
+        result = patched_func_with_kwargs(True)
+        self.assertEqual(result, expected_result)
+
+        expected_result = (False, True, False)
+        result = patched_func_with_kwargs(False, z=False)  # overwrite default
         self.assertEqual(result, expected_result)
 
 

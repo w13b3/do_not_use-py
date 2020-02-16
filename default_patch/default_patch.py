@@ -6,7 +6,7 @@ import inspect
 import functools
 import itertools
 
-# known bug(s):
+# known feature(s):
 # >>> func = lambda x: print(x)
 # >>> func = default_patch(func, x=False)
 # >>> func(True, x=True)  # 'SyntaxError: keyword argument repeated' expected here
@@ -20,11 +20,11 @@ import itertools
 # TypeError: func() missing 1 required positional argument: 'x'
 
 
-def default_patch(func: callable, **default_kwargs) -> callable:
+def default_patch(func: callable = None, **options) -> callable:
     """
     :param func: function to give the default values to
     :type func: callable
-    :param default_kwargs: default keyword arguments that are related to the given function
+    :param options: default keyword arguments that are related to the given function
     :return: the function that is given
     :rtype: callable
 
@@ -43,16 +43,6 @@ def default_patch(func: callable, **default_kwargs) -> callable:
     (True, {2: 'Two', 3: 'Three'})
     """
 
-    if not callable(func):
-        raise ValueError(f'Expected func to be a callable, got: {type(func)!r}')
-
-    func_info = inspect.getfullargspec(func)
-    if not bool(func_info.varkw):  # if there is no **keywords available in the function
-        given, available_options = set(default_kwargs.keys()), set(func_info.args + func_info.kwonlyargs)
-        if not given.issubset(available_options):  # check if wrong keywords are given
-            diff = given.difference(available_options)
-            raise ValueError(f'Given callable: {func.__name__!r} does not accept the following keyword(s): {diff!r}')
-
     @functools.singledispatch
     def extend_value(func_value, default_value):
         return func_value  # not supported values gets returned as is
@@ -68,45 +58,56 @@ def default_patch(func: callable, **default_kwargs) -> callable:
         return new_value
 
     @extend_value.register(dict)
-    def _(func_value: dict, default_value: dict) -> dict:
+    def _(func_value, default_value):
         new_value = {**default_value, **func_value}  # overwrite keyword-value of default
         return new_value
 
     @functools.wraps(func)
-    def inner_func(*func_args, **func_kwargs):
-        self = False
-        potential_self, *_ = func_args or (None, )  # unpack potential self reference or None if no *func_args is given
-        parameter_names = tuple(func_info.args + func_info.kwonlyargs)  # if given this includes self
+    def inner_func(*args, **kwargs):
+        parameter_names = tuple(func_info.args + func_info.kwonlyargs)
 
-        if hasattr(potential_self, func.__name__):
-            _, *parameter_names = parameter_names  # remove object reference (self) from parameter names
-            self, *func_args = func_args  # unpack self from the arguments; bool(self) is a True value
+        # check if wrapped in
+        in_class = False
+        if len(args) > 0:
+            in_class = hasattr(args[0], func.__name__)  # self has attribute of function name
+        if bool(in_class):
+            _, *parameter_names = parameter_names  # remove 'self'
+            self, *args = args  # args become a list
 
-        # add the given 'positional arguments' (func_args) to the 'keyword arguments' (func_kwargs)
-        func_kwargs = {**func_kwargs, **{kw: arg for arg, kw in zip(func_args, parameter_names)}}
-        func_kwargs_copy = func_kwargs.copy()  # make a copy of the variable that is going to change
-        for f_key, f_val in func_kwargs_copy.items():
-            if f_key not in default_kwargs:  # when there is no f_key in the default_keys, continue iteration
+        args_to_kwargs = {key: value for value, key in zip(args, parameter_names)}
+        all_kwargs = {**kwargs, **args_to_kwargs}  # given arguments have priority
+
+        # extend singledispatch types
+        for item_key, item_value in all_kwargs.items():
+            if item_key not in options:
                 continue
-            d_val = default_kwargs.get(f_key)
-            if not type(d_val) == type(f_val):  # when values are not of the same type, continue iteration
+            option_val = options.get(item_key, None)
+            if not type(option_val) == type(item_value):
                 continue
-            new_val = extend_value(f_val, d_val)  # dispatch based on type of f_val
-            func_kwargs[f_key] = new_val  # update the func_kwargs with the extended value
-        new_kwargs = {**default_kwargs, **func_kwargs}  # combine the kwargs with priority for func_kwargs
+            new_value = extend_value(item_value, option_val)
+            all_kwargs[item_key] = new_value
 
-        # if self is a positional argument if default patch is used in a class
-        #  thus object reference needs to be given with the function
-        return func(self, **new_kwargs) if bool(self) else func(**new_kwargs)  # -> callable
+        final_kwargs = {**options, **all_kwargs}
+        return func(self, **final_kwargs) if in_class else func(**final_kwargs)  # return the function
 
-    inner_func.func = func
-    # inner_func.args = default_args  # no args allowed
-    inner_func.keywords = default_kwargs
-    return inner_func
+    # given func should be a callable
+    if func is not None and not callable(func):
+        raise ValueError(f'Expected func to be a callable, got: {type(func)!r}')
 
+    if not bool(options):  # no options are given
+        return func  # do nothing
 
-if __name__ == '__main__':
-    def func(x, y=False): return x, y
-    func = default_patch(func, y=True)
-    func = default_patch(func, x=True)
-    print(func())
+    if callable(func):  # decorator   with   options.
+        func_info = inspect.getfullargspec(func)
+        if not bool(func_info.varkw):  # if there is no **keywords available in the function
+            given, available_options = set(options.keys()), set(func_info.args + func_info.kwonlyargs)
+            if not given.issubset(available_options):  # check if wrong keywords are given
+                diff = given.difference(available_options)
+                raise ValueError(
+                    f'Given callable: {func.__name__!r} does not accept the following keyword(s): {diff!r}')
+
+        return inner_func
+    else:
+        def partial_inner(func):  # decorator   without   options.
+            return default_patch(func, **options)
+        return partial_inner
