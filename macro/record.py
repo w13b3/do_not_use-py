@@ -24,7 +24,7 @@ def start_input_record(record_file_path: str = None) -> str:
     :return: recorded file path
     """
     if not bool(record_file_path):
-        temp_file = NamedTemporaryFile(mode='w', delete=False, prefix='input_record_', suffix='.txt')
+        temp_file = NamedTemporaryFile(mode='w', delete=False, prefix='input_record_', suffix='_.txt')
         record_file_path = temp_file.name
 
     # misuse the python logging module to create a record
@@ -43,9 +43,13 @@ def start_input_record(record_file_path: str = None) -> str:
     mouse_listener.start()
     keyboard_listener.start()
 
-    while not STOP_LISTEN:
+    try:
+        while not STOP_LISTEN:
+            pass
+    except KeyboardInterrupt:  # catch SIGINT
         pass
 
+    logging.debug("END_RECORD")  # default use "END_RECORD"
     return record_file_path
 
 
@@ -84,7 +88,7 @@ def _on_scroll(x: int, y: int, dx: int, dy: int) -> str:
 
 def _on_press(key: Key) -> str:
     """ pynput.keyboard.Listener on_press """
-    msg = f'keyboard_key:{key}:'
+    msg = f'keyboard_key:{key}:1'
     if key != STOP_KEY:
         logging.debug(msg)
 
@@ -107,9 +111,7 @@ def _on_release(key: Key) -> str:
 
 if __name__ == '__main__':
     print("start\n")
+    # file = '/tmp/record_main.txt'
 
-    file = '/tmp/record_main.txt'
-    # file = None
-    print(
-        start_input_record(file)
-    )
+    output_filepath = start_input_record()
+    print(output_filepath)
