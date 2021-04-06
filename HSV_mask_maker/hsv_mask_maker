@@ -1,88 +1,126 @@
 #!/usr/bin/env python3
-import queue
-import cv2  # opencv-python
-import numpy as np
+# -*- coding: utf-8 -*-
+# hsv_mask_maker.py
+
+import sys
+import colorsys
+
+try:  # python3
+    import tkinter as tk
+    import tkinter.ttk as ttk
+    from tkinter import messagebox
+except ImportError:
+    raise NotImplemented  # python2
+
+# import some classes
+from porthole import Porthole
+from viewport import Viewport
+from screengrab import ScreenGrab
+from labeled_slider import LabeledSlider
+from hsv_sliders import HSVSliders
+import screengrab_convert
 
 
-class HSVWindow:
-    """ For HSV mask making
+class App(tk.Tk):
+    """ application to show the viewport, porthole, screengrab combination """
+    # Tk arguments
+    def __init__(self, screenName=None, baseName=None, className='Tk', useTk=1, sync=0, use=None):
+        super(App, self).__init__(screenName, baseName, className, useTk, sync, use)
+        self.title("Porthole")
+        self.geometry('500x420')
+        self.bind("<ButtonRelease>", lambda e: self.update())
 
-    Little code snippet below showing how to use this class:
+        # create the transparent topwindow
+        self.viewport = Viewport(self)
+        self.viewport.geometry('300x300')
 
-    import queue
-    import cv2  # opencv-python
-    import numpy as np
+        # initiate the screen grabber
+        self.screengrab = ScreenGrab(self.viewport)  # imports mss
 
-    from capture_screen import Capture  # https://github.com/w13b3/do_not_use
+        # add the canvas that shows the screenshot to the app
+        self.porthole = Porthole(self)
+        self.porthole.pack(anchor=tk.NW, side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # set the HSV sliders when a color is clicked on the canvas
+        self.porthole.bind("<ButtonPress>", self.__set_sliders)
 
-    ...
+        # Start button
+        self._do_loop = False
+        self.btn_start = tk.Button(self, text='Start', bd=3, command=self.__start_loop)
+        self.btn_start.pack(anchor=tk.SE, side=tk.BOTTOM, fill=tk.X)
 
-    if __name__ == '__main__':
-        from capture_screen import Capture  # https://github.com/w13b3/do_not_use
-        capture_queue = queue.Queue()
-        monitor = {'top': 100, 'left': 100, 'width': 640, 'height': 480}
-        app = Capture(monitor, capture_queue, daemon=True)
-        app.start()  # start the thread
-        HSVWindow(capture_queue).show()
+        # one frame button
+        self.btn_frame = tk.Button(self, text='One frame', bd=3, command=self.__grab_screen)
+        self.btn_frame.pack(anchor=tk.SE, side=tk.BOTTOM, fill=tk.X)
 
-    """
+        if str(sys.platform).lower() == 'linux':
+            # on linux the wm_attributes -transparentcolor doesn't work
+            self.__add_transparent_slider()
 
-    def __init__(self, queue_):
-        """ Init of HSVWindow
+        # add the HSV sliders
+        self.hsv = HSVSliders(self)  # imports numpy and opencv
+        self.hsv.pack(anchor=tk.NE, side=tk.RIGHT)
+        # press the space button to reset the sliders
+        self.bind("<space>", lambda e: self.hsv._reset_button())
 
-        :param queue_: (queue.Queue) a queue to get out the numpy.ndarray
-        """
-        self.queue = queue_
+    def __set_sliders(self, event=None):
+        """ when a color is clicked on the canvas; set the sliders to that color """
+        if event is not None:
+            try:  # get the pixel rgb values, convert them to hsv values
+                r_i, g_i, b_i = app.porthole.get_rgb_value(event.x, event.y)
+            except tk.TclError:  # x or y out of range
+                return
+            h_f, s_f, v_f = colorsys.rgb_to_hsv(r_i / 255, g_i / 255, b_i / 255)
+            h_i, s_i, v_i = int(h_f * 179), int(s_f * 255), int(v_f * 255)
+            l, h = 5, 5  # tolerance
+            self.hsv.hue_high.set((h_i + h) if 0 < (h_i + h) < 179 else 179)
+            self.hsv.hue_low.set((h_i - l) if 0 < (h_i - l) < 179 else 179)
+            self.hsv.sat_high.set((s_i + h) if 0 < (s_i + h) < 255 else 255)
+            self.hsv.sat_low.set((s_i - l) if 0 < (s_i - l) < 255 else 255)
+            self.hsv.val_high.set((v_i + h) if 0 < (v_i + h) < 255 else 255)
+            self.hsv.val_low.set((v_i - l) if 0 < (v_i - l) < 255 else 255)
+            # update the labels
+            [_.update_label_text() for _ in self.hsv.sliders.values()]
 
-    def __create_sliders(self):
-        """ Creates the sliders for the show method """
-        __nothing = lambda _x: None  # createTrackbar needs a callable.
+    def __add_transparent_slider(self) -> None:
+        """ add a slider on the bottom of the window """
+        scale_var = tk.IntVar(self)
+        scale = LabeledSlider(self, from_=100, to=0, value=50, variable=scale_var)
+        scale.set_label_text('Alpha value:')
+        cmd = lambda *e: self.viewport.attributes("-alpha", (scale_var.get() / 100))
+        scale.pack(side=tk.BOTTOM, anchor=tk.S, fill=tk.X)
+        scale.configure(command=cmd)
+        cmd()  # apply the scale value onto the alpha attribute of the window
 
-        cv2.namedWindow("Sliders")
-        cv2.createTrackbar("Lower - H", "Sliders", 0,   179, __nothing)
-        cv2.createTrackbar("Lower - S", "Sliders", 0,   255, __nothing)
-        cv2.createTrackbar("Lower - V", "Sliders", 0,   255, __nothing)
-        cv2.createTrackbar("Upper - H", "Sliders", 179, 179, __nothing)
-        cv2.createTrackbar("Upper - S", "Sliders", 255, 255, __nothing)
-        cv2.createTrackbar("Upper - V", "Sliders", 255, 255, __nothing)
+    def __start_loop(self) -> None:
+        """ start the loop """
+        self._do_loop = not bool(self._do_loop)
+        if self._do_loop:  # loop is started
+            text_ = 'Stop'
+            if str(sys.platform).lower() == 'linux':
+                self.viewport.attributes("-alpha", 0.0)  # not visible
+            self.btn_frame.configure(state=tk.DISABLED)  # no single frame while looping
+            self.__grab_screen()  # Start the loop
+        else:  # stopped loop
+            text_ = 'Start'
+            if str(sys.platform).lower() == 'linux':
+                self.viewport.attributes("-alpha", 0.5)  # half visible
+            self.btn_frame.configure(state=tk.NORMAL)
+            self.viewport.lift()  # raise to top
+        self.btn_start.configure(text=text_)  # change the button text
 
-    def show(self):
-        """ Main funciton of this class
+    def __grab_screen(self) -> None:
+        """ makes a screenshot and set it to the porthole's canvas """
+        data: bytes = self.screengrab.image_as_png_bytes()  # get a image as bytes
 
-        This wil open the captured screen and creates the sliders.
-        The sliders can be used to create a mask on the captured screen.
-        """
+        np_arr = screengrab_convert.bytes_to_cv(data)       # convert the bytes to an array
+        hsv_applied = self.hsv.get_masked_frame(np_arr)     # apply the HSV sliders onto the array
+        data = screengrab_convert.cv_to_bytes(hsv_applied)  # convert the array to the bytes
 
-        self.__create_sliders()  # create the Lower/Upper HSV sliders
-
-        while cv2.getWindowProperty('Sliders', 0) >= 0:  # while the sliders are visible
-            image = self.queue.get()  # get the ndarray from the queue
-            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)  # convert the image to HSV
-
-            # get the values from the sliders/trackbars
-            lower_h = cv2.getTrackbarPos("Lower - H", "Sliders")
-            lower_s = cv2.getTrackbarPos("Lower - S", "Sliders")
-            lower_v = cv2.getTrackbarPos("Lower - V", "Sliders")
-            upper_h = cv2.getTrackbarPos("Upper - H", "Sliders")
-            upper_s = cv2.getTrackbarPos("Upper - S", "Sliders")
-            upper_v = cv2.getTrackbarPos("Upper - V", "Sliders")
-
-            # create the mask that is shown when the sliders are moved
-            lower_blue = np.array([lower_h, lower_s, lower_v])
-            upper_blue = np.array([upper_h, upper_s, upper_v])
-            mask = cv2.inRange(hsv, lower_blue, upper_blue)
-            result = cv2.bitwise_and(image, image, mask=mask)
-
-            cv2.imshow("screen in HSV", result)  # show the result of the sliders
-            if cv2.waitKey(1) & 0xFF == ord('q'):  # when 'q' is typed; break the loop
-                cv2.destroyAllWindows()
-                break
+        self.porthole.set_image(data)  # apply the image onto the canvas
+        if bool(self._do_loop):  # if button start is pressed this is true
+            self.after(1, self.__grab_screen)  # after 1ms call this function again (loop)
 
 
 if __name__ == '__main__':
-    from capture_screen import Capture  # https://github.com/w13b3/do_not_use
-    capture_queue = queue.Queue()
-    monitor = {'top': 100, 'left': 100, 'width': 640, 'height': 480}
-    app = Capture(monitor, capture_queue, daemon=True)
-    app.start()  # start the thread
-    HSVWindow(capture_queue).show()
+    app = App()
+    app.mainloop()
