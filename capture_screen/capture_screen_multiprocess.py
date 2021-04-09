@@ -13,13 +13,15 @@ from mss import ScreenShotError
 
 import numpy as np
 
+__all__ = ['ScreenCapture']
+
 
 class ScreenCapture(Process):
 
     def __init__(self, queue: Queue, bbox: Array):
         super(ScreenCapture, self).__init__(daemon=True)
         self._queue = queue
-        self.bbox = bbox
+        self.bbox = bbox  # shared memory array
         self._running = True
 
     def run(self) -> None:
@@ -33,6 +35,22 @@ class ScreenCapture(Process):
         self._running = not bool(self._running)
         self.terminate()  # stop the process
         self.join(timeout=5)  # join with the main
+
+    @staticmethod
+    def image_rect_to_bbox(left, top, width, height) -> (int, int, int, int):
+        """ convert given window size values to PIL bbox style """
+        return left, top, (left + width), (w_top + height)
+
+    @staticmethod
+    def limit_bbox_to_monitor(bbox, mon_width, mon_height) -> (int, int, int, int):
+        """ limit the bbox to the given monitor width and height """
+        left, upper, right, lower = bbox
+        # make sure the window never gets out of the screen
+        left = left if 0 <= left else 0
+        upper = upper if 0 <= upper else 0
+        right = right if right < mon_width else mon_width
+        lower = lower if lower < mon_height else mon_height
+        return left, upper, right, lower
 
     def __start_screen_capture(self) -> None:
         """ loop that puts the screenshot made into the queue """
@@ -94,14 +112,10 @@ if __name__ == "__main__":
 
             # get the location of the black square on the Viewport window
             w_left, w_top, w_width, w_height = cv.getWindowImageRect(viewport)
-            # Convert PIL bbox style (left, upper, right, lower)
-            left, upper, right, lower = w_left, w_top, (w_left + w_width), (w_top + w_height)
-            # make sure the window never gets out of the screen
-            left = left if 0 <= left else 0
-            upper = upper if 0 <= upper else 0
-            right = right if right < mon_width else mon_width
-            lower = lower if lower < mon_height else mon_height
-            # set it to the monitor array so the ScreenCapture process can use it
+            # convert and limit
+            bbox = screen_capture.image_rect_to_bbox(w_left, w_top, w_width, w_height)
+            left, upper, right, lower = screen_capture.limit_bbox_to_monitor(bbox, mon_width, mon_height)
+            # apply to the shared array
             monitor[:] = (left, upper, right, lower)
 
             if not bool(cv.getWindowProperty(viewport, cv.WND_PROP_VISIBLE)):
