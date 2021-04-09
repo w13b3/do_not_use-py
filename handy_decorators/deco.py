@@ -5,6 +5,39 @@
 import functools
 
 
+def assure(func: callable = None, **options) -> callable:
+    """
+    wrapper for a function which parameter should be exact as expected
+    the given option should be exactly named as the parameter of the wrapped function
+    """
+    if func is not None:
+        @functools.wraps(func)
+        def inner_func(*___wrap_args, **___wrap_kwargs):
+            # create kwargs from given arguments and keyword-arguments and its values
+            func_kw = {**dict(zip(func.__code__.co_varnames, ___wrap_args)), **___wrap_kwargs}
+            assert not any(_ in ___wrap[:2] for _ in func_kw), err_msg
+            for opt_key, opt_val in options.items():
+                try:  # check if the given option's value is the same as the function-value
+                    kw = func_kw[opt_key]
+                    if isinstance(opt_val, tuple):
+                        if kw not in opt_val:
+                            return  # -> None
+                    elif kw != opt_val:
+                        return  # -> None
+                except KeyError:  # option not in the func-params
+                    continue
+            else:  # no break and no return in the for-loop
+                return func(*___wrap_args, **___wrap_kwargs)   # -> callable ( execute the function )
+
+        err_msg = "decorator 'assure' is double stacked or wrapped twice"
+        ___wrap = inner_func.__code__.co_varnames
+        return inner_func
+    else:  # no options given
+        def partial_inner(func):
+            return assure(func, **options)
+        return partial_inner
+
+
 def capitalize_words(func: callable) -> callable:
     """ Makes Every Word In A Sentence Start With A Capital Letter """
     from string import capwords
@@ -70,3 +103,16 @@ if __name__ == '__main__':
 
     change_whitespace = replace_whitespace(func, r='\t' * 5)
     print(change_whitespace('my tabs are wide'))
+
+    # assure decorator
+
+    @assure(b=(2, 3))
+    def f(a, b):
+        return a, b
+
+    print(f(1, 2))
+    print(f(2, 3))
+    print(f(3, 4))  # None, because 4 is not in given assure decorator
+
+    # AssertionError: decorator 'assure' is double stacked or wrapped twice
+    # assure(f, b=4)(4, 4)
